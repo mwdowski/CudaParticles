@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 
-project(cmake_test
+project(CudaParticles
         VERSION 1.0
         LANGUAGES CXX CUDA)
-        
-add_executable(main main.cu)
-set_target_properties(main PROPERTIES CUDA_ARCHITECTURES "72")
+
+add_executable(main_gpu gpu/main.cu)
+add_executable(main_cpu cpu/main.cpp)
+
+set_target_properties(main_gpu PROPERTIES CUDA_ARCHITECTURES "72")
