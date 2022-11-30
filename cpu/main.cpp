@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include "../application/application.hpp"
 
 int main(int argc, char *argv[])
 {
-    printf("Hello world\n");
+    application::start(argc, argv);
     return 0;
 }
