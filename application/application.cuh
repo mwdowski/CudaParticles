@@ -19,9 +19,9 @@ public:
     static const double WINDOW_SIZE_ASPECT;
     static const int WINDOW_POSITION_X;
     static const int WINDOW_POSITION_Y;
-    static particles::particles_set<PARTICLES_NUMBER> arr;
+    static std::unique_ptr<particles::particles_set<PARTICLES_NUMBER>> arr;
     static GLubyte *PixelBuffer;
-    static particles::engine<PARTICLES_NUMBER> eng;
+    static particles::engine<PARTICLES_NUMBER> &eng;
 
 public:
     static void start(int &argc, char *argv[]);

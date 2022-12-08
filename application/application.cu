@@ -15,8 +15,9 @@ const int application::WINDOW_SIZE_X = 1366;
 const int application::WINDOW_SIZE_Y = 768;
 const double application::WINDOW_SIZE_ASPECT = (double)WINDOW_SIZE_X / (double)WINDOW_SIZE_Y;
 GLubyte *application::PixelBuffer = new GLubyte[WINDOW_SIZE_X * WINDOW_SIZE_Y * sizeof(uint)];
-particles::particles_set<application::PARTICLES_NUMBER> application::arr = particles::particles_set<application::PARTICLES_NUMBER>::generate();
-particles::engine<application::PARTICLES_NUMBER> application::eng = particles::engine<application::PARTICLES_NUMBER>();
+std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>> application::arr =
+    std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>>(particles::particles_set<application::PARTICLES_NUMBER>::generate());
+particles::engine<application::PARTICLES_NUMBER> &application::eng = particles::engine<application::PARTICLES_NUMBER>::instance();
 
 void application::start(int &argc, char *argv[])
 {
@@ -43,9 +44,9 @@ void application::display()
     glClear(GL_COLOR_BUFFER_BIT);
 
     glBegin(GL_POINTS);
-    for (int i = 0; i < arr.size; i++)
+    for (int i = 0; i < arr->size; i++)
     {
-        glVertex2f(arr.position_x[i], arr.position_y[i]);
+        glVertex2f(arr->position_x[i], arr->position_y[i]);
     }
     glEnd();
     // glDrawPixels(WINDOW_SIZE_X, WINDOW_SIZE_Y, GL_RGBA, GL_UNSIGNED_BYTE, PixelBuffer);
@@ -70,9 +71,9 @@ void application::reshape(int width, int height)
 
 void application::timer(int value)
 {
-    cuda_try_or_exit(eng.load_data_to_gpu(arr));
+    cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
     cuda_try_or_exit(eng.move());
-    cuda_try_or_exit(eng.load_data_from_gpu(arr));
+    cuda_try_or_exit(eng.load_data_from_gpu(arr.get()));
     glutPostRedisplay();
     glutTimerFunc(16, timer, 0);
 }

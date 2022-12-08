@@ -16,25 +16,25 @@ namespace particles
         float *mass;
 
     public:
-        static particles_set generate()
+        static particles_set<SET_SIZE> *generate()
         {
-            particles_set<SET_SIZE> result;
+            particles_set<SET_SIZE> *result = new particles_set<SET_SIZE>();
             for (int i = 0; i < SET_SIZE; i++)
             {
-                result.position_x[i] = random_float(-0.5, 0.5);
-                result.position_y[i] = random_float(-0.5, 0.5);
-                result.velocity_x[i] = random_float(-0.001, 0.001);
-                result.velocity_y[i] = random_float(-0.001, 0.001);
+                result->position_x[i] = random_float(-0.5, 0.5);
+                result->position_y[i] = random_float(-0.5, 0.5);
+                result->velocity_x[i] = random_float(-0.001, 0.001);
+                result->velocity_y[i] = random_float(-0.001, 0.001);
 
                 if (random_one_or_other('p', 'e') == 'p')
                 {
-                    result.charge[i] = 1;
-                    result.mass[i] = 1.00727647;
+                    result->charge[i] = 1;
+                    result->mass[i] = 1.00727647;
                 }
                 else
                 {
-                    result.charge[i] = -1;
-                    result.mass[i] = 0.0005485;
+                    result->charge[i] = -1;
+                    result->mass[i] = 0.0005485;
                 }
             }
 
