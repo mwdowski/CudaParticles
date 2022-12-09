@@ -19,6 +19,10 @@ public:
     static const double WINDOW_SIZE_ASPECT;
     static const int WINDOW_POSITION_X;
     static const int WINDOW_POSITION_Y;
+    static float x_min;
+    static float x_max;
+    static float y_min;
+    static float y_max;
     static std::unique_ptr<particles::particles_set<PARTICLES_NUMBER>> arr;
     static GLubyte *PixelBuffer;
     static particles::engine<PARTICLES_NUMBER> &eng;

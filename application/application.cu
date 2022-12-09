@@ -1,12 +1,6 @@
 #include "application.cuh"
 #include <stdio.h>
-
-#define cuda_try_or_exit(result)                                               \
-    if (result != cudaSuccess)                                                 \
-    {                                                                          \
-        fprintf(stderr, "%s: %d - CUDA action failed!\n", __FILE__, __LINE__); \
-        exit(1);                                                               \
-    }
+#include "../macros/macros.cuh"
 
 const char *application::WINDOW_TITLE = "GPU PROJECT";
 const int application::WINDOW_POSITION_X = -1;
@@ -18,6 +12,10 @@ GLubyte *application::PixelBuffer = new GLubyte[WINDOW_SIZE_X * WINDOW_SIZE_Y * 
 std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>> application::arr =
     std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>>(particles::particles_set<application::PARTICLES_NUMBER>::generate());
 particles::engine<application::PARTICLES_NUMBER> &application::eng = particles::engine<application::PARTICLES_NUMBER>::instance();
+float application::x_min = 0;
+float application::x_max = 0;
+float application::y_min = 0;
+float application::y_max = 0;
 
 void application::start(int &argc, char *argv[])
 {
@@ -34,7 +32,9 @@ void application::start(int &argc, char *argv[])
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    glutTimerFunc(16, timer, 0);
+
+    cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
+    glutTimerFunc(0, timer, 0);
 
     glutMainLoop();
 }
@@ -64,18 +64,31 @@ void application::reshape(int width, int height)
     double height_size = (double)height / WINDOW_SIZE_Y;
 
     glLoadIdentity();
-    glOrtho(-width_size * WINDOW_SIZE_ASPECT, width_size * WINDOW_SIZE_ASPECT, -height_size, height_size, -1.0, 1.0);
+    x_min = -width_size * WINDOW_SIZE_ASPECT;
+    x_max = width_size * WINDOW_SIZE_ASPECT;
+    y_min = -height_size;
+    y_max = height_size;
+    glOrtho(x_min, x_max, y_min, y_max, -1.0, 1.0);
 
     glMatrixMode(GL_MODELVIEW);
 }
 
+int time2137 = 0;
+
 void application::timer(int value)
 {
-    cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
-    cuda_try_or_exit(eng.move());
+    int new_time = glutGet(GLUT_ELAPSED_TIME);
+    printf("%f\n", 1000.0f / (new_time - time2137));
+    time2137 = new_time;
+
+    GLfloat model[16];
+    glGetFloatv(GL_MODELVIEW_MATRIX, model);
+
+    cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max));
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get()));
     glutPostRedisplay();
-    glutTimerFunc(16, timer, 0);
+
+    glutTimerFunc(0, timer, 0);
 }
 
 void application::makePixel(int x, int y, int r, int g, int b, GLubyte *pixels)
