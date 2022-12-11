@@ -13,7 +13,7 @@
 
 namespace particles
 {
-    const int THREADS_PER_BLOCK = 1024;
+    const int THREADS_PER_BLOCK = 512;
 
     template <int SET_SIZE>
     class engine
@@ -25,7 +25,7 @@ namespace particles
         }
 
     private:
-        static const int QUADTREE_NODES_NUMBER = SET_SIZE * 12;
+        static const int QUADTREE_NODES_NUMBER = SET_SIZE * 1000;
         static inline engine<SET_SIZE> _instance = engine();
         float *dev_position_x = nullptr;
         float *dev_position_y = nullptr;
@@ -35,6 +35,7 @@ namespace particles
         float *dev_mass = nullptr;
 
         int *dev_quadtree = nullptr;
+        int *dev_quadtree_allocated_cells = nullptr;
 
     private:
         engine()
@@ -51,6 +52,9 @@ namespace particles
             cudaFree(dev_charge);
             cudaFree(dev_mass);
             cudaFree(dev_quadtree);
+            cudaFree(dev_quadtree_allocated_cells);
+
+            cudaDeviceSynchronize();
         }
 
     public:
@@ -73,6 +77,9 @@ namespace particles
             cuda_try_or_return(cudaMalloc((void **)&dev_mass, SET_SIZE * sizeof(float)));
 
             cuda_try_or_return(cudaMalloc((void **)&dev_quadtree, QUADTREE_NODES_NUMBER * 4 * sizeof(int)));
+
+            cuda_try_or_return(cudaMalloc((void **)&dev_quadtree_allocated_cells, sizeof(int)));
+            cuda_try_or_return(cudaMemcpyToSymbol(kernels::allocated_quadcells_counter, &dev_quadtree_allocated_cells, sizeof(int *), 0, cudaMemcpyHostToDevice));
 
             return cudaDeviceSynchronize();
         }
@@ -104,6 +111,16 @@ namespace particles
         {
             cuda_try_or_return(set_particles_bounds());
 
+            kernels::clean_quadtree_data_kernel<QUADTREE_NODES_NUMBER><<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree);
+            cuda_try_or_return(cudaMemset(dev_quadtree_allocated_cells, 0, sizeof(int)));
+
+            cuda_try_or_return(cudaDeviceSynchronize());
+            cuda_try_or_return(cudaGetLastError());
+
+            kernels::build_quadtree_kernel<SET_SIZE, QUADTREE_NODES_NUMBER><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree, dev_position_x, dev_position_y);
+            cuda_try_or_return(cudaDeviceSynchronize());
+            cuda_try_or_return(cudaGetLastError());
+
             kernels::apply_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
@@ -113,10 +130,6 @@ namespace particles
                 x_max,
                 y_min,
                 y_max);
-            cuda_try_or_return(cudaDeviceSynchronize());
-            cuda_try_or_return(cudaGetLastError());
-
-            kernels::clean_quadtree_data_kernel<QUADTREE_NODES_NUMBER><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 

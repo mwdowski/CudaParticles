@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 namespace particles
 {
     template <int SET_SIZE>
@@ -18,6 +20,7 @@ namespace particles
     public:
         static particles_set<SET_SIZE> *generate()
         {
+            srand(2137);
             particles_set<SET_SIZE> *result = new particles_set<SET_SIZE>();
             for (int i = 0; i < SET_SIZE; i++)
             {

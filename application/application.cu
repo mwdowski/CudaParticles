@@ -17,6 +17,11 @@ float application::x_max = 0;
 float application::y_min = 0;
 float application::y_max = 0;
 
+void onexit()
+{
+    printf("\n");
+}
+
 void application::start(int &argc, char *argv[])
 {
     eng.initiate();
@@ -25,14 +30,13 @@ void application::start(int &argc, char *argv[])
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
     glutInitWindowPosition(WINDOW_POSITION_X, WINDOW_POSITION_Y);
     glutInitWindowSize(WINDOW_SIZE_X, WINDOW_SIZE_Y);
-
+    atexit(onexit);
     glutCreateWindow(WINDOW_TITLE);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-
     cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
     glutTimerFunc(0, timer, 0);
 
@@ -77,16 +81,16 @@ int time2137 = 0;
 
 void application::timer(int value)
 {
-    int new_time = glutGet(GLUT_ELAPSED_TIME);
-    printf("%f\n", 1000.0f / (new_time - time2137));
-    time2137 = new_time;
+    glutPostRedisplay();
 
-    GLfloat model[16];
-    glGetFloatv(GL_MODELVIEW_MATRIX, model);
+    int new_time = glutGet(GLUT_ELAPSED_TIME);
+    printf("\r%f   ", 1000.0f / (new_time - time2137));
+    fflush(stdout);
+    time2137 = new_time;
 
     cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max));
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get()));
-    glutPostRedisplay();
+    // glutPostRedisplay();
 
     glutTimerFunc(0, timer, 0);
 }

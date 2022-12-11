@@ -12,7 +12,9 @@ thrust_create_target(Thrust)
 
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "-Wall")
+set(CMAKE_CUDA_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+#set(CMAKE_CUDA_FLAGS_DEBUG "-g -G")
 set(DEFAULT_CUDA_ARCHITECTURE "72")
 
 add_library(particles_set particles/particles_set/particles_set.hpp)
