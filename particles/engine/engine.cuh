@@ -25,16 +25,23 @@ namespace particles
         }
 
     private:
-        static const int QUADTREE_NODES_NUMBER = SET_SIZE * 1000;
+        static const int QUADTREE_NODES_NUMBER = SET_SIZE * 64;
         static inline engine<SET_SIZE> _instance = engine();
-        float *dev_position_x = nullptr;
-        float *dev_position_y = nullptr;
+
+        // size: SET_SIZE
         float *dev_velocity_x = nullptr;
         float *dev_velocity_y = nullptr;
-        float *dev_charge = nullptr;
         float *dev_mass = nullptr;
 
+        // size: SET_SIZE + QUADTREE_NODES_NUMBER
+        float *dev_position_x = nullptr;
+        float *dev_position_y = nullptr;
+        float *dev_charge = nullptr;
+
+        // size: QUADTREE_NODES_NUMBER * 4
         int *dev_quadtree = nullptr;
+
+        // size: 1
         int *dev_quadtree_allocated_cells = nullptr;
 
     private:
@@ -69,11 +76,11 @@ namespace particles
         {
             cuda_try_or_return(cudaSetDevice(0));
 
-            cuda_try_or_return(cudaMalloc((void **)&dev_position_x, SET_SIZE * sizeof(float)));
-            cuda_try_or_return(cudaMalloc((void **)&dev_position_y, SET_SIZE * sizeof(float)));
+            cuda_try_or_return(cudaMalloc((void **)&dev_position_x, (SET_SIZE + QUADTREE_NODES_NUMBER) * sizeof(float)));
+            cuda_try_or_return(cudaMalloc((void **)&dev_position_y, (SET_SIZE + QUADTREE_NODES_NUMBER) * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_velocity_x, SET_SIZE * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_velocity_y, SET_SIZE * sizeof(float)));
-            cuda_try_or_return(cudaMalloc((void **)&dev_charge, SET_SIZE * sizeof(float)));
+            cuda_try_or_return(cudaMalloc((void **)&dev_charge, (SET_SIZE + QUADTREE_NODES_NUMBER) * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_mass, SET_SIZE * sizeof(float)));
 
             cuda_try_or_return(cudaMalloc((void **)&dev_quadtree, QUADTREE_NODES_NUMBER * 4 * sizeof(int)));
@@ -111,13 +118,22 @@ namespace particles
         {
             cuda_try_or_return(set_particles_bounds());
 
-            kernels::clean_quadtree_data_kernel<QUADTREE_NODES_NUMBER><<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree);
+            kernels::clean_quadtree_children_data_kernel<QUADTREE_NODES_NUMBER>
+                <<<QUADTREE_NODES_NUMBER * 4 / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree);
+            kernels::clean_quadtree_physical_data_kernel<SET_SIZE, QUADTREE_NODES_NUMBER>
+                <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge);
             cuda_try_or_return(cudaMemset(dev_quadtree_allocated_cells, 0, sizeof(int)));
 
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
-            kernels::build_quadtree_kernel<SET_SIZE, QUADTREE_NODES_NUMBER><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree, dev_position_x, dev_position_y);
+            kernels::build_quadtree_kernel<SET_SIZE, QUADTREE_NODES_NUMBER>
+                <<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree, dev_position_x, dev_position_y, dev_charge);
+            cuda_try_or_return(cudaDeviceSynchronize());
+            cuda_try_or_return(cudaGetLastError());
+
+            kernels::compute_center_of_charge_kernel<SET_SIZE>
+                <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
