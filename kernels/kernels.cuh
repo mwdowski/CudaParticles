@@ -7,6 +7,13 @@ namespace kernels
     const int QUADTREE_EMPTY = INT_MIN;
     const int QUADTREE_LOCK = INT_MIN + 1;
     const int QUADTREE_SUCCESS = INT_MIN + 2;
+    const int WARP_SIZE = 32;
+    const int STACK_SIZE = 64;
+    const float THETA = 0.5f;
+    const float EPS = 0.00025f;
+    const float K = 14.3996f; // eV * Å / e^2
+    const float SCALE_MULTIPLIER = 0.0000001f;
+    const int THREADS_PER_BLOCK = 512;
 
     __constant__ __device__ float const_dev_x_min = 0;
     __constant__ __device__ float const_dev_x_max = 0;
@@ -286,6 +293,134 @@ namespace kernels
             float c = charge[index];
             position_x[index] /= c;
             position_y[index] /= c;
+        }
+    }
+
+    /*
+    template <int SET_SIZE>
+    __global__ void sort_kernel()
+    {
+        int index = threadIdx.x + blockIdx.x * blockDim.x;
+
+        return;
+    }
+    */
+
+    template <int SET_SIZE>
+    __global__ void compute_velocities_kernel(
+        float *position_x, float *position_y,
+        float *velocity_x, float *velocity_y,
+        float *charge, float *mass,
+        int *quadtree)
+    {
+        int index = threadIdx.x + blockIdx.x * blockDim.x;
+
+        float radius = 0.5 * (const_dev_x_max - const_dev_x_min);
+
+        __shared__ float depth[STACK_SIZE * THREADS_PER_BLOCK / WARP_SIZE];
+        __shared__ int stack[STACK_SIZE * THREADS_PER_BLOCK / WARP_SIZE];
+
+        int counter = threadIdx.x % WARP_SIZE;
+        int stack_start_index = STACK_SIZE * (threadIdx.x / WARP_SIZE);
+
+        int jj = -1;
+#pragma unroll
+        for (int i = 0; i < 4; i++)
+        {
+            if (quadtree[i] != QUADTREE_EMPTY)
+            {
+                jj++;
+            }
+        }
+
+        if (index < SET_SIZE)
+        {
+            float p_x = position_x[index];
+            float p_y = position_y[index];
+
+            float a_x = 0.0f;
+            float a_y = 0.0f;
+
+            int top = stack_start_index + jj;
+            if (counter == 0)
+            {
+                int tmp = 0;
+
+#pragma unroll
+                for (int i = 0; i < 4; i++)
+                {
+                    if (quadtree[i] != QUADTREE_EMPTY)
+                    {
+                        stack[stack_start_index + tmp] = quadtree[i];
+                        depth[stack_start_index + tmp] = radius * radius / THETA;
+                        tmp++;
+                    }
+                    // if(child[i] == -1){
+                    // 	printf("%s %d %d %d %d %s %d\n", "THROW ERROR!!!!", child[0], child[1], child[2], child[3], "top: ",top);
+                    // }
+                    // else{
+                    // 	stack[stackStartIndex + temp] = child[i];
+                    // 	depth[stackStartIndex + temp] = radius*radius/theta;
+                    // 	temp++;
+                    // }
+                }
+            }
+
+            __syncthreads();
+
+            // while stack is not empty
+            while (top >= stack_start_index)
+            {
+                int node = stack[top];
+                float dp = 0.25f * depth[top];
+                // float dp = depth[top];
+
+#pragma unroll
+                for (int i = 0; i < 4; i++)
+                {
+                    int ch = quadtree[(node << 2) + i];
+
+                    if (ch != QUADTREE_EMPTY)
+                    {
+                        if (ch < 0)
+                        {
+                            ch = ~ch;
+                        }
+                        else
+                        {
+                            ch += SET_SIZE;
+                        }
+
+                        float dx = position_x[ch] - p_x;
+                        float dy = position_y[ch] - p_y;
+                        float r = dx * dx + dy * dy + EPS;
+                        if (ch < SET_SIZE /*is leaf node*/ || __all_sync(1, dp <= r) /*meets criterion*/)
+                        {
+                            r = rsqrt(r);
+                            float f = K * charge[ch] * charge[index] * r * r * r / (mass[index]);
+
+                            a_x += f * dx;
+                            a_y += f * dy;
+                        }
+                        else
+                        {
+                            if (counter == 0)
+                            {
+                                stack[top] = ch;
+                                depth[top] = dp;
+                                // depth[top] = 0.25*dp;
+                            }
+                            top++;
+                            //__threadfence();
+                        }
+                    }
+                }
+
+                top--;
+            }
+
+            velocity_x[index] += SCALE_MULTIPLIER * a_x;
+            velocity_y[index] += SCALE_MULTIPLIER * a_y;
         }
     }
 }

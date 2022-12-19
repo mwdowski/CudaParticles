@@ -137,6 +137,17 @@ namespace particles
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
+            kernels::compute_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
+                dev_position_x,
+                dev_position_y,
+                dev_velocity_x,
+                dev_velocity_y,
+                dev_charge,
+                dev_mass,
+                dev_quadtree);
+            cuda_try_or_return(cudaDeviceSynchronize());
+            cuda_try_or_return(cudaGetLastError());
+
             kernels::apply_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
