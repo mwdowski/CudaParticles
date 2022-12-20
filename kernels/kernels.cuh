@@ -9,11 +9,11 @@ namespace kernels
     __constant__ __device__ const int QUADTREE_SUCCESS = INT_MIN + 2;
     __constant__ __device__ const int WARP_SIZE = 32;
     __constant__ __device__ const int STACK_SIZE = 64;
-    __constant__ __device__ const float THETA = 1.0f;
-    __constant__ __device__ const float EPS = 0.00025f;
+    __constant__ __device__ const float THETA = 0.7f;
+    __constant__ __device__ const float EPS = 0.00000025f;
     __constant__ __device__ const float K = 14.3996f; // eV * Å / e^2
     __constant__ __device__ const float SCALE_MULTIPLIER = 0.0000001f;
-    __constant__ __device__ const int THREADS_PER_BLOCK = 512;
+    __constant__ __device__ const int THREADS_PER_BLOCK = 256;
 
     __constant__ __device__ float const_dev_x_min = 0;
     __constant__ __device__ float const_dev_x_max = 0;
@@ -105,23 +105,23 @@ namespace kernels
             if (p_x > x_max)
             {
                 v_x = -v_x;
-                p_x -= 2 * (p_x - x_max);
+                p_x = x_max;
             }
             else if (p_x < x_min)
             {
                 v_x = -v_x;
-                p_x += 2 * (x_min - p_x);
+                p_x = x_min;
             }
 
             if (p_y > y_max)
             {
                 v_y = -v_y;
-                p_y -= 2 * (p_y - y_max);
+                p_y = y_max;
             }
             else if (p_y < y_min)
             {
                 v_y = -v_y;
-                p_y += 2 * (y_min - p_y);
+                p_y = y_min;
             }
 
             p_x += v_x;
@@ -287,7 +287,7 @@ namespace kernels
         int counter = *allocated_quadcells_counter;
         int index = threadIdx.x + blockIdx.x * blockDim.x;
 
-        if (index < counter)
+        if (index < counter * 4)
         {
             index += SET_SIZE;
             float c = charge[index];
@@ -381,7 +381,7 @@ namespace kernels
                     int ch = QUADTREE_EMPTY;
                     if (node >= 0)
                     {
-                        ch = quadtree[(node << 2) + i];
+                        ch = quadtree[node + i];
                     }
 
                     if (ch != QUADTREE_EMPTY)
@@ -398,14 +398,12 @@ namespace kernels
                         float dx = position_x[ch] - p_x;
                         float dy = position_y[ch] - p_y;
                         float r = dx * dx + dy * dy + EPS;
-                        if (ch < SET_SIZE /*is leaf node*/ || __all_sync((unsigned int)0xFFFFFFFF, dp <= r) /*meets criterion*/)
+                        if (ch < SET_SIZE /*is leaf node*/ || __all_sync(0xFFFFFFFFU, dp <= r) /*meets criterion*/)
                         {
                             r = rsqrt(r);
 
                             // + if they repel, - if they attract
                             float f = K * charge[ch] * charge[index] * r * r * r / (mass[index]);
-
-
 
                             a_x += -f * dx;
                             a_y += -f * dy;
@@ -415,8 +413,8 @@ namespace kernels
                             if (counter == 0)
                             {
                                 stack[top] = ch;
-                                //depth[top] = dp;
-                                depth[top] = 0.25*dp;
+                                depth[top] = dp;
+                                // depth[top] = 0.25 * dp;
                             }
                             top++;
                             //__threadfence();
@@ -432,30 +430,23 @@ namespace kernels
         }
     }
 
-    __device__ inline void set_color(float f, GLubyte pixel[4])
+    __device__ inline void set_color(float f_x, float f_y, GLubyte pixel[4])
     {
         pixel[0] = 0x00;
         pixel[1] = 0x00;
         pixel[2] = 0x00;
         pixel[3] = 0x00;
 
-        f *= 0.05f;
+        float f = 0.1f * sqrt(f_x * f_x + f_y * f_y);
 
-        if (f > 0)
-        {
-            pixel[0] = (unsigned char) ((f > 255 ? 255 : f));
-        }
-        else if (f < 0)
-        {
-            pixel[1] = (unsigned char) ((f < -255 ? 255 : -f));
-        }
+        pixel[0] = (unsigned char)((f > 255 ? 255 : f));
     }
 
     template <int SET_SIZE>
     __global__ void compute_pixels_kernel(
-        float* position_x, float* position_y,
-        float* charge, int* quadtree,
-        GLubyte* pixel_buffer,
+        float *position_x, float *position_y,
+        float *charge, int *quadtree,
+        GLubyte *pixel_buffer,
         float x_min, float x_max, float y_min, float y_max,
         int width, int height)
     {
@@ -486,8 +477,8 @@ namespace kernels
                 int x = index % width;
                 int y = index / width;
 
-                float p_x = (float)x / (float)width;
-                float p_y = (float)y / (float)height;
+                float p_x = ((float)x / (float)width) * (x_max - x_min) + x_min;
+                float p_y = ((float)y / (float)height) * (y_max - y_min) + y_min;
 
                 float f_x = 0.0f;
                 float f_y = 0.0f;
@@ -532,14 +523,14 @@ namespace kernels
                         int ch = QUADTREE_EMPTY;
                         if (node >= 0)
                         {
-                            ch = quadtree[(node << 2) + i];
+                            ch = quadtree[node + i];
                         }
 
                         if (ch != QUADTREE_EMPTY)
                         {
                             if (ch < 0)
                             {
-                                ch = ~ch;
+                                ch = quadtree_value_to_body_index(ch);
                             }
                             else
                             {
@@ -549,14 +540,12 @@ namespace kernels
                             float dx = position_x[ch] - p_x;
                             float dy = position_y[ch] - p_y;
                             float r = dx * dx + dy * dy + EPS;
-                            if (ch < SET_SIZE /*is leaf node*/ || __all_sync((unsigned int)0xFFFFFFFF, dp <= r) /*meets criterion*/)
+                            if (ch < SET_SIZE /*is leaf node*/ || __all_sync(0xFFFFFFFFU, dp <= r) /*meets criterion*/)
                             {
                                 r = rsqrt(r);
 
                                 // + if they repel, - if they attract
                                 float f = K * charge[ch] * r * r * r;
-
-
 
                                 f_x += -f * dx;
                                 f_y += -f * dy;
@@ -566,8 +555,8 @@ namespace kernels
                                 if (counter == 0)
                                 {
                                     stack[top] = ch;
-                                    //depth[top] = dp;
-                                    depth[top] = 0.25 * dp;
+                                    depth[top] = dp;
+                                    // depth[top] = 0.25 * dp;
                                 }
                                 top++;
                                 //__threadfence();
@@ -578,19 +567,12 @@ namespace kernels
                     top--;
                 }
 
-
                 GLubyte pixel[4];
-                pixel_buffer[index * 4] = 255;
-                pixel_buffer[index * 4 + 1] = 0;
-                pixel_buffer[index * 4 + 2] = 0;
-                pixel_buffer[index * 4 + 3] = 0;
-                
-                
-                set_color(sqrt(f_x * f_x + f_y * f_y), pixel);
-                ((GLuint*)(pixel_buffer))[index] = *((GLuint *)pixel);
+                set_color(f_x, f_y, pixel);
+                ((GLuint *)(pixel_buffer))[index] = *((GLuint *)pixel);
 
-                //buffer[index] = *((GLuint *)pixel);
-                
+                // buffer[index] = *((GLuint *)pixel);
+
                 /*
                 unsigned int green = 255;
                 unsigned int red = 0;
@@ -600,7 +582,6 @@ namespace kernels
 
                 buffer[index] = *((GLuint *)&aaa);
                 */
-
             }
         }
     }

@@ -12,7 +12,7 @@
 class application
 {
 public:
-    static const int PARTICLES_NUMBER = 10;
+    static const int PARTICLES_NUMBER = 100;
     static const char *WINDOW_TITLE;
     static const int WINDOW_SIZE_X;
     static const int WINDOW_SIZE_Y;
@@ -40,4 +40,5 @@ private:
     static void reshape(int width, int height);
     static void timer(int value);
     static void makePixel(int x, int y, int r, int g, int b, GLubyte *pixels);
+    static void keyboard(unsigned char c, int x, int y);
 };

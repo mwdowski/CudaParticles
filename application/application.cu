@@ -8,7 +8,7 @@ const int application::WINDOW_POSITION_Y = -1;
 const int application::WINDOW_SIZE_X = 1366;
 const int application::WINDOW_SIZE_Y = 768;
 const double application::WINDOW_SIZE_ASPECT = (double)WINDOW_SIZE_X / (double)WINDOW_SIZE_Y;
-GLubyte *application::PixelBuffer = new GLubyte[WINDOW_SIZE_X * WINDOW_SIZE_Y * sizeof(GLubyte) * 4];
+GLubyte *application::PixelBuffer = new GLubyte[WINDOW_SIZE_X * WINDOW_SIZE_Y * 4];
 std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>> application::arr =
     std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>>(particles::particles_set<application::PARTICLES_NUMBER>::generate());
 particles::engine<application::PARTICLES_NUMBER> &application::eng = particles::engine<application::PARTICLES_NUMBER>::instance();
@@ -19,9 +19,56 @@ float application::y_max = 0;
 int application::width = 0;
 int application::height = 0;
 
+int pause = 0;
+
 void onexit()
 {
     printf("\n");
+}
+
+void mouse_right(int x, int y)
+{
+
+    application::eng.set_mouse_particle(
+        ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
+        -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
+        100);
+}
+
+void mouse_left(int x, int y)
+{
+
+    application::eng.set_mouse_particle(
+        ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
+        -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
+        -100);
+}
+
+void mouse_move(int button, int state, int x, int y)
+{
+    if (state == GLUT_DOWN)
+    {
+        if (button == GLUT_RIGHT_BUTTON)
+        {
+            glutMotionFunc(mouse_right);
+        }
+        else if (button == GLUT_LEFT_BUTTON)
+        {
+            glutMotionFunc(mouse_left);
+        }
+    }
+}
+
+void application::keyboard(unsigned char c, int x, int y)
+{
+    if (c == ' ')
+    {
+        pause = !pause;
+        if (!pause)
+        {
+            glutTimerFunc(0, application::timer, 0);
+        }
+    }
 }
 
 void application::start(int &argc, char *argv[])
@@ -33,12 +80,16 @@ void application::start(int &argc, char *argv[])
     glutInitWindowPosition(WINDOW_POSITION_X, WINDOW_POSITION_Y);
     glutInitWindowSize(WINDOW_SIZE_X, WINDOW_SIZE_Y);
     atexit(onexit);
+
     glutCreateWindow(WINDOW_TITLE);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
+    glutMouseFunc(mouse_move);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
+    glutKeyboardFunc(keyboard);
+
     cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
     glutTimerFunc(0, timer, 0);
 
@@ -54,12 +105,20 @@ void application::display()
     glBegin(GL_POINTS);
     for (int i = 0; i < arr->size; i++)
     {
+        if (arr->charge[i] > 0)
+        {
+            glColor3f(1, 1, 1);
+        }
+        else
+        {
+            glColor3f(0, 1, 1);
+        }
         glVertex2f(arr->position_x[i], arr->position_y[i]);
     }
     glEnd();
-    
+
     glutSwapBuffers();
-    // glFlush();
+    //  glFlush();
 }
 
 void application::reshape(int width, int height)
@@ -79,7 +138,7 @@ void application::reshape(int width, int height)
     x_max = width_size * WINDOW_SIZE_ASPECT;
     y_min = -height_size;
     y_max = height_size;
-    glOrtho(x_max, x_min, y_max, y_min, -1.0, 1.0);
+    glOrtho(x_min, x_max, y_min, y_max, -1.0, 1.0);
 
     glMatrixMode(GL_MODELVIEW);
 }
@@ -99,7 +158,10 @@ void application::timer(int value)
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get(), PixelBuffer));
     // glutPostRedisplay();
 
-    glutTimerFunc(0, timer, 0);
+    if (!pause)
+    {
+        glutTimerFunc(0, timer, 0);
+    }
 }
 
 void application::makePixel(int x, int y, int r, int g, int b, GLubyte *pixels)
