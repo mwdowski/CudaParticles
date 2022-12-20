@@ -13,11 +13,13 @@
 
 namespace particles
 {
-    const int THREADS_PER_BLOCK = 512;
+    const int THREADS_PER_BLOCK = 256;
 
     template <int SET_SIZE>
     class engine
     {
+    private:
+        static engine<SET_SIZE> _instance;
     public:
         static engine<SET_SIZE> &instance()
         {
@@ -26,12 +28,12 @@ namespace particles
 
     private:
         static const int QUADTREE_NODES_NUMBER = SET_SIZE * 64;
-        static inline engine<SET_SIZE> _instance = engine();
 
         // size: SET_SIZE
         float *dev_velocity_x = nullptr;
         float *dev_velocity_y = nullptr;
         float *dev_mass = nullptr;
+        GLubyte* dev_pixels = nullptr;
 
         // size: SET_SIZE + QUADTREE_NODES_NUMBER
         float *dev_position_x = nullptr;
@@ -60,6 +62,7 @@ namespace particles
             cudaFree(dev_mass);
             cudaFree(dev_quadtree);
             cudaFree(dev_quadtree_allocated_cells);
+            cudaFree(dev_pixels);
 
             cudaDeviceSynchronize();
         }
@@ -82,6 +85,8 @@ namespace particles
             cuda_try_or_return(cudaMalloc((void **)&dev_velocity_y, SET_SIZE * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_charge, (SET_SIZE + QUADTREE_NODES_NUMBER) * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_mass, SET_SIZE * sizeof(float)));
+
+            cuda_try_or_return(cudaMalloc((void**)&dev_pixels, 4 * 3000 * 2000 * sizeof(GLubyte)));
 
             cuda_try_or_return(cudaMalloc((void **)&dev_quadtree, QUADTREE_NODES_NUMBER * 4 * sizeof(int)));
 
@@ -106,15 +111,16 @@ namespace particles
             return cudaDeviceSynchronize();
         }
 
-        cudaError_t load_data_from_gpu(particles_set<SET_SIZE> *particles_set)
+        cudaError_t load_data_from_gpu(particles_set<SET_SIZE> *particles_set, GLubyte *pixel_buffer)
         {
             cuda_try_or_return(cudaMemcpy(particles_set->position_x, dev_position_x, SET_SIZE * sizeof(float), cudaMemcpyDeviceToHost));
             cuda_try_or_return(cudaMemcpy(particles_set->position_y, dev_position_y, SET_SIZE * sizeof(float), cudaMemcpyDeviceToHost));
+            cuda_try_or_return(cudaMemcpy(pixel_buffer, dev_pixels, 1366 * 768 * 4 * sizeof(GLubyte), cudaMemcpyDeviceToHost));
 
             return cudaDeviceSynchronize();
         }
 
-        cudaError_t move(float x_min, float x_max, float y_min, float y_max)
+        cudaError_t move(float x_min, float x_max, float y_min, float y_max, int width, int height)
         {
             cuda_try_or_return(set_particles_bounds());
 
@@ -145,6 +151,18 @@ namespace particles
                 dev_charge,
                 dev_mass,
                 dev_quadtree);
+            cuda_try_or_return(cudaDeviceSynchronize());
+            cuda_try_or_return(cudaGetLastError());
+
+            kernels::compute_pixels_kernel<SET_SIZE><<<width * height / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
+                dev_position_x,
+                dev_position_y,
+                dev_charge,
+                dev_quadtree,
+                dev_pixels,
+                x_min, x_max,
+                y_min, y_max,
+                width, height);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
@@ -189,4 +207,6 @@ namespace particles
         }
     };
 
+    template<int SET_SIZE>
+    engine<SET_SIZE> engine<SET_SIZE>::_instance = engine<SET_SIZE>();
 }

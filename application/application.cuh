@@ -12,7 +12,7 @@
 class application
 {
 public:
-    static const int PARTICLES_NUMBER = 10'000;
+    static const int PARTICLES_NUMBER = 10;
     static const char *WINDOW_TITLE;
     static const int WINDOW_SIZE_X;
     static const int WINDOW_SIZE_Y;
@@ -26,6 +26,9 @@ public:
     static std::unique_ptr<particles::particles_set<PARTICLES_NUMBER>> arr;
     static GLubyte *PixelBuffer;
     static particles::engine<PARTICLES_NUMBER> &eng;
+
+    static int width;
+    static int height;
 
 public:
     static void start(int &argc, char *argv[]);
