@@ -151,11 +151,20 @@ namespace particles
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
+            /*
+            int lq[1024];
+
+            cudaMemcpy(lq, dev_quadtree, (QUADTREE_NODES_NUMBER * 4 < 1024 ? QUADTREE_NODES_NUMBER * 4 : 1024) * sizeof(int), cudaMemcpyDeviceToHost);
+            cudaDeviceSynchronize();
+            */
+
             kernels::compute_center_of_charge_kernel<SET_SIZE_WITH_MOUSE_PARTICLE>
                 <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
+            
+            
             kernels::compute_velocities_kernel<SET_SIZE_WITH_MOUSE_PARTICLE><<<SET_SIZE_WITH_MOUSE_PARTICLE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
@@ -164,9 +173,8 @@ namespace particles
                 dev_charge,
                 dev_mass,
                 dev_quadtree);
-            cuda_try_or_return(cudaDeviceSynchronize());
-            cuda_try_or_return(cudaGetLastError());
-
+            
+            /*
             kernels::compute_pixels_kernel<SET_SIZE_WITH_MOUSE_PARTICLE><<<width * height / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
@@ -178,6 +186,7 @@ namespace particles
                 width, height);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
+            */
 
             kernels::apply_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
@@ -194,10 +203,6 @@ namespace particles
             return cudaDeviceSynchronize();
         }
 
-        void perform_step()
-        {
-        }
-
         /// @brief Set const_dev_x_min, const_dev_x_max, const_dev_y_min, const_dev_y_max, that are stored in constant memory of GPU.
         /// @return Value of cudaError_t from first unsuccessfull CUDA call.
         cudaError_t set_particles_bounds()
@@ -207,8 +212,8 @@ namespace particles
             thrust::device_ptr<float> thrust_position_y = thrust::device_pointer_cast(dev_position_y);
 
             // perform thrust minmax operation
-            auto width_limits = thrust::minmax_element(thrust_position_x, thrust_position_x + SET_SIZE);
-            auto height_limits = thrust::minmax_element(thrust_position_y, thrust_position_y + SET_SIZE);
+            auto width_limits = thrust::minmax_element(thrust_position_x, thrust_position_x + SET_SIZE_WITH_MOUSE_PARTICLE);
+            auto height_limits = thrust::minmax_element(thrust_position_y, thrust_position_y + SET_SIZE_WITH_MOUSE_PARTICLE);
 
             // copy results into device constant memory
             cuda_try_or_return(cudaMemcpyToSymbol(kernels::const_dev_x_min, width_limits.first.get(), sizeof(float), 0, cudaMemcpyDeviceToDevice));

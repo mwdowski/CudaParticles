@@ -24,20 +24,20 @@ namespace particles
             particles_set<SET_SIZE> *result = new particles_set<SET_SIZE>();
             for (int i = 0; i < SET_SIZE; i++)
             {
-                result->position_x[i] = random_float(-1.5, 1.5);
-                result->position_y[i] = random_float(-1.5, 1.5);
-                result->velocity_x[i] = random_float(-0.001, 0.001);
-                result->velocity_y[i] = random_float(-0.001, 0.001);
+                result->position_x[i] = random_float(-1.5f, 1.5f);
+                result->position_y[i] = random_float(-1.5f, 1.5f);
+                result->velocity_x[i] = random_float(-0.001f, 0.001f);
+                result->velocity_y[i] = random_float(-0.001f, 0.001f);
 
                 if (random_one_or_other('p', 'e') == 'p')
                 {
-                    result->charge[i] = 1;
-                    result->mass[i] = 1.00727647;
+                    result->charge[i] = 1.0f;
+                    result->mass[i] = 1.00727647f;
                 }
                 else
                 {
-                    result->charge[i] = -1;
-                    result->mass[i] = 0.0005485;
+                    result->charge[i] = -1.0f;
+                    result->mass[i] = 0.0005485f;
                 }
             }
 
@@ -69,7 +69,7 @@ namespace particles
             return min + (float)rand() / ((float)RAND_MAX / (max - min));
         }
 
-        template <class T>
+        template <typename T>
         static T random_one_or_other(T one, T other)
         {
             return rand() % 2 == 0 ? one : other;

@@ -7,7 +7,7 @@ const int application::WINDOW_POSITION_X = -1;
 const int application::WINDOW_POSITION_Y = -1;
 const int application::WINDOW_SIZE_X = 1366;
 const int application::WINDOW_SIZE_Y = 768;
-const double application::WINDOW_SIZE_ASPECT = (double)WINDOW_SIZE_X / (double)WINDOW_SIZE_Y;
+const float application::WINDOW_SIZE_ASPECT = (float)WINDOW_SIZE_X / (float)WINDOW_SIZE_Y;
 GLubyte *application::PixelBuffer = new GLubyte[WINDOW_SIZE_X * WINDOW_SIZE_Y * 4];
 std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>> application::arr =
     std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>>(particles::particles_set<application::PARTICLES_NUMBER>::generate());
@@ -18,8 +18,9 @@ float application::y_min = 0;
 float application::y_max = 0;
 int application::width = 0;
 int application::height = 0;
+int application::milliseconds_between_refresh = 0;
 
-int pause = 0;
+bool pause = false;
 
 void onexit()
 {
@@ -28,33 +29,43 @@ void onexit()
 
 void mouse_right(int x, int y)
 {
-
     application::eng.set_mouse_particle(
         ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
         -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
-        100);
+        50.0f);
 }
 
 void mouse_left(int x, int y)
 {
-
     application::eng.set_mouse_particle(
         ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
         -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
-        -100);
+        -50.0f);
+}
+
+void mouse_middle(int x, int y)
+{
+    application::eng.set_mouse_particle(
+        ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
+        -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
+        0.0f);
 }
 
 void mouse_move(int button, int state, int x, int y)
 {
-    if (state == GLUT_DOWN)
+    if (state == GLUT_UP)
     {
         if (button == GLUT_RIGHT_BUTTON)
         {
-            glutMotionFunc(mouse_right);
+            mouse_right(x, y);
         }
         else if (button == GLUT_LEFT_BUTTON)
         {
-            glutMotionFunc(mouse_left);
+            mouse_left(x, y);
+        }
+        else if (button == GLUT_MIDDLE_BUTTON)
+        {
+            mouse_middle(x, y);
         }
     }
 }
@@ -91,13 +102,15 @@ void application::start(int &argc, char *argv[])
     glutKeyboardFunc(keyboard);
 
     cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
-    glutTimerFunc(50, timer, 0);
+    glutTimerFunc(milliseconds_between_refresh, timer, 0);
 
     glutMainLoop();
 }
 
 void application::display()
 {
+    glFinish();
+    //printf("1. started drawing\n");
     glClear(GL_COLOR_BUFFER_BIT);
 
     glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, PixelBuffer);
@@ -111,13 +124,15 @@ void application::display()
         }
         else
         {
-            glColor3f(0, 1, 1);
+            glColor3f(0, 1, 0);
         }
         glVertex2f(arr->position_x[i], arr->position_y[i]);
     }
     glEnd();
 
     glutSwapBuffers();
+    //printf("2. ended drawing\n");
+    glFinish();
     // glFlush();
 }
 
@@ -127,8 +142,8 @@ void application::reshape(int width, int height)
 
     glViewport(0, 0, width, height);
 
-    double width_size = (double)width / WINDOW_SIZE_X;
-    double height_size = (double)height / WINDOW_SIZE_Y;
+    float width_size = (float)width / WINDOW_SIZE_X;
+    float height_size = (float)height / WINDOW_SIZE_Y;
 
     application::width = width;
     application::height = height;
@@ -147,8 +162,10 @@ int time2137 = 0;
 
 void application::timer(int value)
 {
+    glFinish();
     glutPostRedisplay();
 
+    //printf("3. started counting\n");
     int new_time = glutGet(GLUT_ELAPSED_TIME);
     printf("\r%f   ", 1000.0f / (new_time - time2137));
     fflush(stdout);
@@ -156,12 +173,15 @@ void application::timer(int value)
 
     cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max, width, height));
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get(), PixelBuffer));
-    glutPostRedisplay();
+
+    //printf("4. ended counting\n");
 
     if (!pause)
     {
-        glutTimerFunc(50, timer, 0);
+        glutTimerFunc(milliseconds_between_refresh, timer, 0);
     }
+
+    glFinish();
 }
 
 void application::makePixel(int x, int y, int r, int g, int b, GLubyte *pixels)
