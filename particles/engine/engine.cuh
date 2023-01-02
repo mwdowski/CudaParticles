@@ -13,7 +13,7 @@
 
 namespace particles
 {
-    const int THREADS_PER_BLOCK = 256;
+    const int THREADS_PER_BLOCK = kernels::THREADS_PER_BLOCK;
 
     template <int SET_SIZE>
     class engine
@@ -167,7 +167,6 @@ namespace particles
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
-            /*
             kernels::compute_pixels_kernel<SET_SIZE_WITH_MOUSE_PARTICLE><<<width * height / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
@@ -179,7 +178,6 @@ namespace particles
                 width, height);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
-            */
 
             kernels::apply_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,

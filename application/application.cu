@@ -91,7 +91,7 @@ void application::start(int &argc, char *argv[])
     glutKeyboardFunc(keyboard);
 
     cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
-    glutTimerFunc(0, timer, 0);
+    glutTimerFunc(50, timer, 0);
 
     glutMainLoop();
 }
@@ -118,7 +118,7 @@ void application::display()
     glEnd();
 
     glutSwapBuffers();
-    //  glFlush();
+    // glFlush();
 }
 
 void application::reshape(int width, int height)
@@ -156,11 +156,11 @@ void application::timer(int value)
 
     cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max, width, height));
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get(), PixelBuffer));
-    // glutPostRedisplay();
+    glutPostRedisplay();
 
     if (!pause)
     {
-        glutTimerFunc(0, timer, 0);
+        glutTimerFunc(50, timer, 0);
     }
 }
 

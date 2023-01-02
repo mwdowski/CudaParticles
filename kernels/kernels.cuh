@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cuda_runtime.h"
+#include <cmath>
 
 namespace kernels
 {
@@ -9,11 +10,11 @@ namespace kernels
     __constant__ __device__ const int QUADTREE_SUCCESS = INT_MIN + 2;
     __constant__ __device__ const int WARP_SIZE = 32;
     __constant__ __device__ const int STACK_SIZE = 64;
-    __constant__ __device__ const float THETA = 0.7f;
-    __constant__ __device__ const float EPS = 0.00000025f;
+    __constant__ __device__ const float THETA = 0.5f;
+    __constant__ __device__ const float EPS = 0.025f;
     __constant__ __device__ const float K = 14.3996f; // eV * Å / e^2
     __constant__ __device__ const float SCALE_MULTIPLIER = 0.0000001f;
-    __constant__ __device__ const int THREADS_PER_BLOCK = 256;
+    __constant__ __device__ const int THREADS_PER_BLOCK = 128;
 
     __constant__ __device__ float const_dev_x_min = 0;
     __constant__ __device__ float const_dev_x_max = 0;
@@ -398,7 +399,7 @@ namespace kernels
                         float dx = position_x[ch] - p_x;
                         float dy = position_y[ch] - p_y;
                         float r = dx * dx + dy * dy + EPS;
-                        if (ch < SET_SIZE /*is leaf node*/ || __all_sync(0xFFFFFFFFU, dp <= r) /*meets criterion*/)
+                        if (ch < SET_SIZE /*is leaf node*/ || __all_sync(UINT32_MAX, dp <= r) /*meets criterion*/)
                         {
                             r = rsqrt(r);
 
@@ -437,7 +438,16 @@ namespace kernels
         pixel[2] = 0x00;
         pixel[3] = 0x00;
 
-        float f = 0.1f * sqrt(f_x * f_x + f_y * f_y);
+        float f = f_x * f_x + f_y * f_y;
+
+        if (f > 255 * 255 * 10)
+        {
+            f = 255;
+        }
+        else
+        {
+            f = 0.1f * sqrt(f);
+        }
 
         pixel[0] = (unsigned char)((f > 255 ? 255 : f));
     }
@@ -540,7 +550,7 @@ namespace kernels
                             float dx = position_x[ch] - p_x;
                             float dy = position_y[ch] - p_y;
                             float r = dx * dx + dy * dy + EPS;
-                            if (ch < SET_SIZE /*is leaf node*/ || __all_sync(0xFFFFFFFFU, dp <= r) /*meets criterion*/)
+                            if (ch < SET_SIZE /*is leaf node*/ || __all_sync(UINT32_MAX, dp <= r) /*meets criterion*/)
                             {
                                 r = rsqrt(r);
 

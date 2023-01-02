@@ -12,7 +12,7 @@
 class application
 {
 public:
-    static const int PARTICLES_NUMBER = 100;
+    static const int PARTICLES_NUMBER = 10'000;
     static const char *WINDOW_TITLE;
     static const int WINDOW_SIZE_X;
     static const int WINDOW_SIZE_Y;
