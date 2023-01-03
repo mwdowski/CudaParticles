@@ -7,6 +7,7 @@ project(CudaParticles
 find_package(OpenGL REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(Thrust REQUIRED)
+find_package(glfw3 REQUIRED)
 
 thrust_create_target(Thrust)
 
@@ -41,7 +42,7 @@ set_target_properties(engine PROPERTIES CUDA_ARCHITECTURES ${DEFAULT_CUDA_ARCHIT
 add_library(application application/application.cu application/application.cuh)
 target_include_directories(application PUBLIC application PUBLIC particles/particles_set PUBLIC particles/engine)
 target_include_directories(application PUBLIC ${OPENGL_INCLUDE_DIRS} ${GLUT_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS})
-target_link_libraries(application ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${CUDA_RUNTIME_LIBRARY})
+target_link_libraries(application ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${CUDA_RUNTIME_LIBRARY} ${OPENGL_gl_LIBRARY} glfw)
 set_target_properties(application PROPERTIES CUDA_ARCHITECTURES ${DEFAULT_CUDA_ARCHITECTURE})
 
 add_executable(main_gpu gpu/main.cu)

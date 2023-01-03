@@ -439,7 +439,7 @@ namespace kernels
 		}
 	}
 
-	__device__ inline void set_color(float f_x, float f_y, GLubyte pixel[4])
+	__device__ inline void set_color(float f_x, float f_y, unsigned char pixel[4])
 	{
 
 		pixel[0] = 0x00U;
@@ -473,7 +473,7 @@ namespace kernels
 	__global__ void compute_pixels_kernel(
 		float *position_x, float *position_y,
 		float *charge, int *quadtree,
-		GLubyte *pixel_buffer,
+		unsigned char *pixel_buffer,
 		float x_min, float x_max, float y_min, float y_max,
 		int width, int height)
 	{
@@ -593,9 +593,9 @@ namespace kernels
 				top--;
 			}
 
-			GLubyte pixel[4];
+			unsigned char pixel[4];
 			set_color(f_x, f_y, pixel);
-			((GLuint *)(pixel_buffer))[index] = *((GLuint *)pixel);
+			((unsigned int *)(pixel_buffer))[index] = *((unsigned int *)pixel);
 		}
 	}
 }

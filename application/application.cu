@@ -10,7 +10,7 @@ const int application::WINDOW_POSITION_Y = -1;
 const int application::WINDOW_SIZE_X = 1366;
 const int application::WINDOW_SIZE_Y = 768;
 const float application::WINDOW_SIZE_ASPECT = (float)WINDOW_SIZE_X / (float)WINDOW_SIZE_Y;
-GLubyte *application::PixelBuffer = new GLubyte[WINDOW_SIZE_X * WINDOW_SIZE_Y * 4];
+unsigned char *application::PixelBuffer = new unsigned char[WINDOW_SIZE_X * WINDOW_SIZE_Y * 4];
 std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>> application::arr =
     std::unique_ptr<particles::particles_set<application::PARTICLES_NUMBER>>(particles::particles_set<application::PARTICLES_NUMBER>::generate());
 particles::engine<application::PARTICLES_NUMBER> &application::eng = particles::engine<application::PARTICLES_NUMBER>::instance();
@@ -34,7 +34,7 @@ void mouse_right(int x, int y)
     application::eng.set_mouse_particle(
         ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
         -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
-        50.0f);
+        200.0f);
 }
 
 void mouse_left(int x, int y)
@@ -42,7 +42,7 @@ void mouse_left(int x, int y)
     application::eng.set_mouse_particle(
         ((float)x / (float)application::width) * (application::x_max - application::x_min) + application::x_min,
         -((float)y / (float)application::height) * (application::y_max - application::y_min) - application::y_min,
-        -50.0f);
+        -200.0f);
 }
 
 void mouse_middle(int x, int y)
@@ -55,32 +55,15 @@ void mouse_middle(int x, int y)
 
 void mouse_move(int button, int state, int x, int y)
 {
-    if (state == GLUT_UP)
-    {
-        if (button == GLUT_RIGHT_BUTTON)
-        {
-            mouse_right(x, y);
-        }
-        else if (button == GLUT_LEFT_BUTTON)
-        {
-            mouse_left(x, y);
-        }
-        else if (button == GLUT_MIDDLE_BUTTON)
-        {
-            mouse_middle(x, y);
-        }
-    }
 }
 
 void application::keyboard(unsigned char c, int x, int y)
 {
     if (c == ' ')
     {
-        timer(1);
         pause = !pause;
         if (!pause)
         {
-            glutTimerFunc(0, application::timer, 0);
         }
     }
 }
@@ -92,7 +75,6 @@ GLuint buffer_id;
 
 void register_buffer()
 {
-    glGenBuffers(1, &buffer_id);
     glGenTextures(1, &texture_id);
     glBindTexture(GL_TEXTURE_2D, texture_id);
 
@@ -109,42 +91,105 @@ void register_buffer()
     cuda_try_or_exit(cudaGraphicsGLRegisterImage(&m_cudaGraphicsResource, texture_id, GL_TEXTURE_2D, cudaGraphicsMapFlagsWriteDiscard));
 }
 
+void error_callback(int error, const char *description)
+{
+    fprintf(stderr, "Error: %s\n", description);
+}
+
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+    {
+        pause = !pause;
+    }
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    {
+        mouse_left(xpos, ypos);
+    }
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+    {
+        mouse_right(xpos, ypos);
+    }
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS)
+    {
+        mouse_middle(xpos, ypos);
+    }
+}
+
 void application::start(int &argc, char *argv[])
 {
     eng.initiate();
+    eng.load_data_to_gpu(arr.get());
+    if (!glfwInit())
+    {
+        return;
+    }
 
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
-    glutInitWindowPosition(WINDOW_POSITION_X, WINDOW_POSITION_Y);
-    glutInitWindowSize(WINDOW_SIZE_X, WINDOW_SIZE_Y);
-    atexit(onexit);
+    glfwSetErrorCallback(error_callback);
 
-    glutCreateWindow(WINDOW_TITLE);
+    GLFWwindow *window = glfwCreateWindow(WINDOW_SIZE_X, WINDOW_SIZE_Y, WINDOW_TITLE, NULL, NULL);
+    if (!window)
+    {
+        return;
+    }
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glfwMakeContextCurrent(window);
 
-    glutMouseFunc(mouse_move);
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-    glutKeyboardFunc(keyboard);
+    glEnable(GL_TEXTURE_2D);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    while (!glfwWindowShouldClose(window))
+    {
+        reshape(1366, 768);
+        display(window);
+        if (!pause)
+        {
+            timer();
+        }
 
-    register_buffer();
+        glfwPollEvents();
+    }
 
-    cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
-    // glutTimerFunc(milliseconds_between_refresh, timer, 0);
-
-    glutMainLoop();
+    onexit();
+    glfwDestroyWindow(window);
+    glfwTerminate();
 }
 
-void application::display()
+void application::display(GLFWwindow *window)
 {
     glFinish();
     // printf("1. started drawing\n");
     glClear(GL_COLOR_BUFFER_BIT);
-
     glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, PixelBuffer);
 
-    glFinish();
+    /*
+    GLuint texID = 2137;
+    if (texID == 2137)
+        glGenTextures(1, &texID);
+    glBindTexture(GL_TEXTURE_2D, texID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1366, 768, 0, GL_RGBA, GL_UNSIGNED_BYTE, PixelBuffer);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0);
+    glVertex2f(x_min, y_min);
+    glTexCoord2f(1, 0);
+    glVertex2f(x_max, y_min);
+    glTexCoord2f(1, 1);
+    glVertex2f(x_max, y_max);
+    glTexCoord2f(0, 1);
+    glVertex2f(x_min, y_max);
+    glEnd();
+    */
+
+    // glBindTexture(GL_TEXTURE_2D, 0);
 
     glBegin(GL_POINTS);
     for (int i = 0; i < arr->size; i++)
@@ -161,11 +206,7 @@ void application::display()
     }
     glEnd();
 
-    glFinish();
-    glutSwapBuffers();
-    // printf("2. ended drawing\n");
-    glFinish();
-    // glFlush();
+    glfwSwapBuffers(window);
 }
 
 void application::reshape(int width, int height)
@@ -190,31 +231,19 @@ void application::reshape(int width, int height)
     glMatrixMode(GL_MODELVIEW);
 }
 
-int time2137 = 0;
+double time2137 = 0;
 
-void application::timer(int value)
+void application::timer()
 {
-    glFinish();
-    // glutPostRedisplay();
 
-    // printf("3. started counting\n");
-    int new_time = glutGet(GLUT_ELAPSED_TIME);
-    printf("\r%f   ", 1000.0f / (new_time - time2137));
+    double new_time = glfwGetTime();
+
+    printf("\r%f   ", 1.0 / (new_time - time2137));
     fflush(stdout);
     time2137 = new_time;
 
     cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max, width, height, m_cudaGraphicsResource));
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get(), PixelBuffer));
-
-    // printf("4. ended counting\n");
-    cudaDeviceSynchronize();
-    display();
-    glFinish();
-
-    if (!pause)
-    {
-        // glutTimerFunc(milliseconds_between_refresh, timer, 0);
-    }
 }
 
 void application::makePixel(int x, int y, int r, int g, int b, GLubyte *pixels)
