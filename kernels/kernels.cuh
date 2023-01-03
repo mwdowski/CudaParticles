@@ -10,10 +10,10 @@ namespace kernels
 	__constant__ __device__ const int QUADTREE_SUCCESS = INT_MIN + 2;
 	__constant__ __device__ const int WARP_SIZE = 32;
 	__constant__ __device__ const int STACK_SIZE = 64;
-	__constant__ __device__ const float THETA = 0.3f;
-	__constant__ __device__ const float EPS = 0.0025f;
+	__constant__ __device__ const float THETA = 1.0f;
+	__constant__ __device__ const float EPS = 0.00025f;
 	__constant__ __device__ const float K = 14.3996f; // eV * Å / e^2
-	__constant__ __device__ const float SCALE_MULTIPLIER = 0.00000001f;
+	__constant__ __device__ const float SCALE_MULTIPLIER = 0.0000000001f;
 	__constant__ __device__ const int THREADS_PER_BLOCK = 128;
 	__constant__ __device__ const float COLOR_SCALE = 0.000001f;
 
@@ -21,19 +21,19 @@ namespace kernels
 	__constant__ __device__ float const_dev_x_max = 0;
 	__constant__ __device__ float const_dev_y_min = 0;
 	__constant__ __device__ float const_dev_y_max = 0;
-	__constant__ __device__ int* allocated_quadcells_counter;
+	__constant__ __device__ int *allocated_quadcells_counter;
 
-	__device__ inline bool is_body(const int& quadtree_index)
+	__device__ inline bool is_body(const int &quadtree_index)
 	{
 		return quadtree_index < 0;
 	}
 
-	__device__ inline int body_index_to_quadtree_value(const int& body_index)
+	__device__ inline int body_index_to_quadtree_value(const int &body_index)
 	{
 		return ~body_index;
 	}
 
-	__device__ inline int quadtree_value_to_body_index(const int& quadtree_index)
+	__device__ inline int quadtree_value_to_body_index(const int &quadtree_index)
 	{
 		return ~quadtree_index;
 	}
@@ -53,15 +53,15 @@ namespace kernels
 	}
 
 	template <int SET_SIZE>
-	__device__ inline int quadtree_cell_index_to_index_in_physical_arrays(const int& quadtree_index)
+	__device__ inline int quadtree_cell_index_to_index_in_physical_arrays(const int &quadtree_index)
 	{
 		return (quadtree_index >> 2) + SET_SIZE;
 	}
 
 	__device__ inline int quadtree_child_local_index_and_modify_cell_limits(
 		float x, float y,
-		float& cell_x_min, float& cell_x_max,
-		float& cell_y_min, float& cell_y_max)
+		float &cell_x_min, float &cell_x_max,
+		float &cell_y_min, float &cell_y_max)
 	{
 		int next_child_number = 0;
 
@@ -93,7 +93,7 @@ namespace kernels
 	}
 
 	template <int SET_SIZE>
-	__global__ void apply_velocities_kernel(float* position_x, float* position_y, float* velocity_x, float* velocity_y, float x_min, float x_max, float y_min, float y_max)
+	__global__ void apply_velocities_kernel(float *position_x, float *position_y, float *velocity_x, float *velocity_y, float x_min, float x_max, float y_min, float y_max)
 	{
 		int index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -137,7 +137,7 @@ namespace kernels
 	}
 
 	template <int QUADTREE_NODES_NUMBER>
-	__global__ void clean_quadtree_children_data_kernel(int* quadtree)
+	__global__ void clean_quadtree_children_data_kernel(int *quadtree)
 	{
 		int index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -148,7 +148,7 @@ namespace kernels
 	}
 
 	template <int SET_SIZE, int QUADTREE_NODES_NUMBER>
-	__global__ void clean_quadtree_physical_data_kernel(float* position_x, float* position_y, float* charge)
+	__global__ void clean_quadtree_physical_data_kernel(float *position_x, float *position_y, float *charge, float *charge_abs)
 	{
 		int index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -161,11 +161,12 @@ namespace kernels
 			position_x[index] = 0;
 			position_y[index] = 0;
 			charge[index] = 0;
+			charge_abs[index] = 0;
 		}
 	}
 
 	template <int SET_SIZE, int QUADTREE_NODES_NUMBER>
-	__global__ void build_quadtree_kernel(int* quadtree, float* position_x, float* position_y, float* charge)
+	__global__ void build_quadtree_kernel(int *quadtree, float *position_x, float *position_y, float *charge, float *charge_abs)
 	{
 		int cell_index = 0;
 		int body_index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -178,6 +179,7 @@ namespace kernels
 		float particle_x = success ? 0 : position_x[body_index];
 		float particle_y = success ? 0 : position_y[body_index];
 		float particle_charge = success ? 0 : charge[body_index];
+		float particle_charge_abs = abs(particle_charge);
 		float current_cell_x_min = const_dev_x_min;
 		float current_cell_x_max = const_dev_x_max;
 		float current_cell_y_min = const_dev_y_min;
@@ -201,9 +203,10 @@ namespace kernels
 				if (compute_lower_cell)
 				{
 					int tmp = quadtree_cell_index_to_index_in_physical_arrays<SET_SIZE>(cell_index);
-					atomicAdd(&charge[tmp], particle_x * particle_charge);
-					atomicAdd(&charge[tmp], particle_y * particle_charge);
-					atomicAdd(&charge[tmp], particle_charge * particle_charge);
+					atomicAdd(&position_x[tmp], particle_x * particle_charge_abs);
+					atomicAdd(&position_y[tmp], particle_y * particle_charge_abs);
+					atomicAdd(&charge[tmp], particle_charge);
+					atomicAdd(&charge_abs[tmp], particle_charge_abs);
 
 					cell_index += quadtree_child_local_index_and_modify_cell_limits(
 						particle_x, particle_y,
@@ -239,6 +242,7 @@ namespace kernels
 						float other_x = position_x[other_particle_index];
 						float other_y = position_y[other_particle_index];
 						float other_charge = charge[other_particle_index];
+						float other_charge_abs = charge_abs[other_particle_index];
 
 						int other_next_child_number = quadtree_child_local_index(
 							other_x, other_y,
@@ -251,9 +255,10 @@ namespace kernels
 						quadtree[cell_index] = other_new_parent_cell_numer;
 
 						int tmp = quadtree_cell_index_to_index_in_physical_arrays<SET_SIZE>(other_new_parent_cell_numer + other_next_child_number);
-						atomicAdd(&charge[tmp], other_x * other_charge);
-						atomicAdd(&charge[tmp], other_y * other_charge);
+						atomicAdd(&position_x[tmp], other_x * other_charge_abs);
+						atomicAdd(&position_y[tmp], other_y * other_charge_abs);
 						atomicAdd(&charge[tmp], other_charge);
+						atomicAdd(&charge_abs[tmp], other_charge_abs);
 
 						// ? powinienem to robić ? chyba tak, bo czemu by nie
 						cell_index = other_new_parent_cell_numer;
@@ -284,7 +289,7 @@ namespace kernels
 	}
 
 	template <int SET_SIZE>
-	__global__ void compute_center_of_charge_kernel(float* position_x, float* position_y, float* charge)
+	__global__ void compute_center_of_charge_kernel(float *position_x, float *position_y, float *charge, float *charge_abs)
 	{
 		int counter = *allocated_quadcells_counter;
 		int index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -292,7 +297,7 @@ namespace kernels
 		if (index < counter * 4)
 		{
 			index += SET_SIZE;
-			float c = charge[index];
+			float c = charge_abs[index];
 			position_x[index] /= c;
 			position_y[index] /= c;
 		}
@@ -310,10 +315,10 @@ namespace kernels
 
 	template <int SET_SIZE>
 	__global__ void compute_velocities_kernel(
-		float* position_x, float* position_y,
-		float* velocity_x, float* velocity_y,
-		float* charge, float* mass,
-		int* quadtree)
+		float *position_x, float *position_y,
+		float *velocity_x, float *velocity_y,
+		float *charge, float *mass,
+		int *quadtree)
 	{
 		int index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -436,6 +441,7 @@ namespace kernels
 
 	__device__ inline void set_color(float f_x, float f_y, GLubyte pixel[4])
 	{
+
 		pixel[0] = 0x00U;
 		pixel[1] = 0x00U;
 		pixel[2] = 0x00U;
@@ -445,28 +451,29 @@ namespace kernels
 
 		if (!isnan(f))
 		{
-			if (f > 255 * 255 * 1 / COLOR_SCALE)
+			if (f > 255 / COLOR_SCALE)
 			{
 				f = 255;
 			}
 			else
 			{
-				f = COLOR_SCALE * sqrt(sqrt(f));
+				f = COLOR_SCALE * f;
 			}
 
 			pixel[0] = (unsigned char)((f > 255.0f ? 255 : f));
+			pixel[2] = pixel[0] + 60;
 		}
 		else
 		{
-			pixel[0] = (unsigned char)0;
+			pixel[1] = (unsigned char)255;
 		}
 	}
 
 	template <int SET_SIZE>
 	__global__ void compute_pixels_kernel(
-		float* position_x, float* position_y,
-		float* charge, int* quadtree,
-		GLubyte* pixel_buffer,
+		float *position_x, float *position_y,
+		float *charge, int *quadtree,
+		GLubyte *pixel_buffer,
 		float x_min, float x_max, float y_min, float y_max,
 		int width, int height)
 	{
@@ -495,8 +502,8 @@ namespace kernels
 			int x = index % width;
 			int y = index / width;
 
-			float p_x = ((float)x / (float)width) * (x_max - x_min) + x_min;
-			float p_y = ((float)y / (float)height) * (y_max - y_min) + y_min;
+			float p_x = x * (x_max - x_min) / width + x_min;
+			float p_y = y * (y_max - y_min) / height + y_min;
 
 			float f_x = 0.0f;
 			float f_y = 0.0f;
@@ -550,7 +557,7 @@ namespace kernels
 					{
 						if (ch < 0)
 						{
-							ch = quadtree_value_to_body_index(ch);
+							ch = ~ch;
 						}
 						else
 						{
@@ -564,7 +571,6 @@ namespace kernels
 						{
 							r = rsqrt(r);
 
-							// + if they repel, - if they attract
 							float f = K * charge[ch] * r * r * r;
 
 							f_x += f * dx;
@@ -589,19 +595,7 @@ namespace kernels
 
 			GLubyte pixel[4];
 			set_color(f_x, f_y, pixel);
-			((GLuint*)(pixel_buffer))[index] = *((GLuint*)pixel);
-
-			// buffer[index] = *((GLuint *)pixel);
-
-			/*
-			unsigned int green = 255;
-			unsigned int red = 0;
-			unsigned int blue = 255;
-
-			unsigned int aaa = (green << 12) + (red << 4) + (blue << 8);
-
-			buffer[index] = *((GLuint *)&aaa);
-			*/
+			((GLuint *)(pixel_buffer))[index] = *((GLuint *)pixel);
 		}
 	}
 }

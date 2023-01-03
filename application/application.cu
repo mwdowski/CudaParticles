@@ -1,6 +1,8 @@
 #include "application.cuh"
 #include <stdio.h>
 #include "../macros/macros.cuh"
+#include <time.h>
+#include <cuda_gl_interop.h>
 
 const char *application::WINDOW_TITLE = "GPU PROJECT";
 const int application::WINDOW_POSITION_X = -1;
@@ -18,7 +20,7 @@ float application::y_min = 0;
 float application::y_max = 0;
 int application::width = 0;
 int application::height = 0;
-int application::milliseconds_between_refresh = 0;
+int application::milliseconds_between_refresh = 30;
 
 bool pause = false;
 
@@ -74,12 +76,37 @@ void application::keyboard(unsigned char c, int x, int y)
 {
     if (c == ' ')
     {
+        timer(1);
         pause = !pause;
         if (!pause)
         {
             glutTimerFunc(0, application::timer, 0);
         }
     }
+}
+
+GLuint texture_id;
+cudaGraphicsResource *m_cudaGraphicsResource;
+cudaTextureObject_t m_texture;
+GLuint buffer_id;
+
+void register_buffer()
+{
+    glGenBuffers(1, &buffer_id);
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+
+    /*
+    // set basic parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    */
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1366, 768, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    cuda_try_or_exit(cudaGraphicsGLRegisterImage(&m_cudaGraphicsResource, texture_id, GL_TEXTURE_2D, cudaGraphicsMapFlagsWriteDiscard));
 }
 
 void application::start(int &argc, char *argv[])
@@ -101,8 +128,10 @@ void application::start(int &argc, char *argv[])
     glutReshapeFunc(reshape);
     glutKeyboardFunc(keyboard);
 
+    register_buffer();
+
     cuda_try_or_exit(eng.load_data_to_gpu(arr.get()));
-    glutTimerFunc(milliseconds_between_refresh, timer, 0);
+    // glutTimerFunc(milliseconds_between_refresh, timer, 0);
 
     glutMainLoop();
 }
@@ -110,10 +139,12 @@ void application::start(int &argc, char *argv[])
 void application::display()
 {
     glFinish();
-    //printf("1. started drawing\n");
+    // printf("1. started drawing\n");
     glClear(GL_COLOR_BUFFER_BIT);
 
     glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, PixelBuffer);
+
+    glFinish();
 
     glBegin(GL_POINTS);
     for (int i = 0; i < arr->size; i++)
@@ -130,8 +161,9 @@ void application::display()
     }
     glEnd();
 
+    glFinish();
     glutSwapBuffers();
-    //printf("2. ended drawing\n");
+    // printf("2. ended drawing\n");
     glFinish();
     // glFlush();
 }
@@ -163,25 +195,26 @@ int time2137 = 0;
 void application::timer(int value)
 {
     glFinish();
-    glutPostRedisplay();
+    // glutPostRedisplay();
 
-    //printf("3. started counting\n");
+    // printf("3. started counting\n");
     int new_time = glutGet(GLUT_ELAPSED_TIME);
     printf("\r%f   ", 1000.0f / (new_time - time2137));
     fflush(stdout);
     time2137 = new_time;
 
-    cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max, width, height));
+    cuda_try_or_exit(eng.move(x_min, x_max, y_min, y_max, width, height, m_cudaGraphicsResource));
     cuda_try_or_exit(eng.load_data_from_gpu(arr.get(), PixelBuffer));
 
-    //printf("4. ended counting\n");
+    // printf("4. ended counting\n");
+    cudaDeviceSynchronize();
+    display();
+    glFinish();
 
     if (!pause)
     {
-        glutTimerFunc(milliseconds_between_refresh, timer, 0);
+        // glutTimerFunc(milliseconds_between_refresh, timer, 0);
     }
-
-    glFinish();
 }
 
 void application::makePixel(int x, int y, int r, int g, int b, GLubyte *pixels)

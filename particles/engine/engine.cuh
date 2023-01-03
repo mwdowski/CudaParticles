@@ -5,6 +5,7 @@
 #include "../particles_set/particles_set.hpp"
 #include "../../macros/macros.cuh"
 #include "../../kernels/kernels.cuh"
+#include <cuda_gl_interop.h>
 
 #include <thrust/extrema.h>
 #include <thrust/device_vector.h>
@@ -41,6 +42,7 @@ namespace particles
         float *dev_position_x = nullptr;
         float *dev_position_y = nullptr;
         float *dev_charge = nullptr;
+        float *dev_charge_abs = nullptr;
 
         // size: QUADTREE_NODES_NUMBER * 4
         int *dev_quadtree = nullptr;
@@ -61,6 +63,7 @@ namespace particles
             cudaFree(dev_velocity_x);
             cudaFree(dev_velocity_y);
             cudaFree(dev_charge);
+            cudaFree(dev_charge_abs);
             cudaFree(dev_mass);
             cudaFree(dev_quadtree);
             cudaFree(dev_quadtree_allocated_cells);
@@ -86,6 +89,7 @@ namespace particles
             cuda_try_or_return(cudaMalloc((void **)&dev_velocity_x, SET_SIZE_WITH_MOUSE_PARTICLE * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_velocity_y, SET_SIZE_WITH_MOUSE_PARTICLE * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_charge, (SET_SIZE_WITH_MOUSE_PARTICLE + QUADTREE_NODES_NUMBER) * sizeof(float)));
+            cuda_try_or_return(cudaMalloc((void **)&dev_charge_abs, (SET_SIZE_WITH_MOUSE_PARTICLE + QUADTREE_NODES_NUMBER) * sizeof(float)));
             cuda_try_or_return(cudaMalloc((void **)&dev_mass, SET_SIZE_WITH_MOUSE_PARTICLE * sizeof(float)));
 
             cuda_try_or_return(cudaMalloc((void **)&dev_pixels, 4 * 1366 * 768 * sizeof(GLubyte)));
@@ -101,9 +105,11 @@ namespace particles
         cudaError_t set_mouse_particle(float x, float y, float charge)
         {
             float mass = 1'000'000.0f;
+            float charge_abs = abs(charge);
             cuda_try_or_return(cudaMemcpy(dev_position_x + SET_SIZE, &x, sizeof(float), cudaMemcpyHostToDevice));
             cuda_try_or_return(cudaMemcpy(dev_position_y + SET_SIZE, &y, sizeof(float), cudaMemcpyHostToDevice));
             cuda_try_or_return(cudaMemcpy(dev_charge + SET_SIZE, &charge, sizeof(float), cudaMemcpyHostToDevice));
+            cuda_try_or_return(cudaMemcpy(dev_charge_abs + SET_SIZE, &charge_abs, sizeof(float), cudaMemcpyHostToDevice));
             cuda_try_or_return(cudaMemcpy(dev_mass + SET_SIZE, &mass, sizeof(float), cudaMemcpyHostToDevice));
 
             return cudaDeviceSynchronize();
@@ -119,6 +125,7 @@ namespace particles
             cuda_try_or_return(cudaMemcpy(dev_velocity_x, particles_set->velocity_x, SET_SIZE * sizeof(float), cudaMemcpyHostToDevice));
             cuda_try_or_return(cudaMemcpy(dev_velocity_y, particles_set->velocity_y, SET_SIZE * sizeof(float), cudaMemcpyHostToDevice));
             cuda_try_or_return(cudaMemcpy(dev_charge, particles_set->charge, SET_SIZE * sizeof(float), cudaMemcpyHostToDevice));
+            cuda_try_or_return(cudaMemcpy(dev_charge_abs, particles_set->charge_abs, SET_SIZE * sizeof(float), cudaMemcpyHostToDevice));
             cuda_try_or_return(cudaMemcpy(dev_mass, particles_set->mass, SET_SIZE * sizeof(float), cudaMemcpyHostToDevice));
 
             return cudaDeviceSynchronize();
@@ -133,21 +140,34 @@ namespace particles
             return cudaDeviceSynchronize();
         }
 
-        cudaError_t move(float x_min, float x_max, float y_min, float y_max, int width, int height)
+        cudaError_t move(float x_min, float x_max, float y_min, float y_max, int width, int height, cudaGraphicsResource *texture)
         {
+            kernels::apply_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
+                dev_position_x,
+                dev_position_y,
+                dev_velocity_x,
+                dev_velocity_y,
+                x_min,
+                x_max,
+                y_min,
+                y_max);
+            cuda_try_or_return(cudaDeviceSynchronize());
+            cuda_try_or_return(cudaGetLastError());
+
             cuda_try_or_return(set_particles_bounds());
 
             kernels::clean_quadtree_children_data_kernel<QUADTREE_NODES_NUMBER>
                 <<<QUADTREE_NODES_NUMBER * 4 / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree);
             kernels::clean_quadtree_physical_data_kernel<SET_SIZE_WITH_MOUSE_PARTICLE, QUADTREE_NODES_NUMBER>
-                <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge);
+                <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge, dev_charge_abs);
             cuda_try_or_return(cudaMemset(dev_quadtree_allocated_cells, 0, sizeof(int)));
 
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
             kernels::build_quadtree_kernel<SET_SIZE_WITH_MOUSE_PARTICLE, QUADTREE_NODES_NUMBER>
-                <<<SET_SIZE_WITH_MOUSE_PARTICLE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_quadtree, dev_position_x, dev_position_y, dev_charge);
+                <<<SET_SIZE_WITH_MOUSE_PARTICLE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
+                    dev_quadtree, dev_position_x, dev_position_y, dev_charge, dev_charge_abs);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
@@ -159,12 +179,10 @@ namespace particles
             */
 
             kernels::compute_center_of_charge_kernel<SET_SIZE_WITH_MOUSE_PARTICLE>
-                <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge);
+                <<<QUADTREE_NODES_NUMBER / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(dev_position_x, dev_position_y, dev_charge, dev_charge_abs);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 
-            
-            
             kernels::compute_velocities_kernel<SET_SIZE_WITH_MOUSE_PARTICLE><<<SET_SIZE_WITH_MOUSE_PARTICLE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
@@ -173,8 +191,7 @@ namespace particles
                 dev_charge,
                 dev_mass,
                 dev_quadtree);
-            
-            /*
+
             kernels::compute_pixels_kernel<SET_SIZE_WITH_MOUSE_PARTICLE><<<width * height / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
                 dev_position_x,
                 dev_position_y,
@@ -184,19 +201,6 @@ namespace particles
                 x_min, x_max,
                 y_min, y_max,
                 width, height);
-            cuda_try_or_return(cudaDeviceSynchronize());
-            cuda_try_or_return(cudaGetLastError());
-            */
-
-            kernels::apply_velocities_kernel<SET_SIZE><<<SET_SIZE / THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>(
-                dev_position_x,
-                dev_position_y,
-                dev_velocity_x,
-                dev_velocity_y,
-                x_min,
-                x_max,
-                y_min,
-                y_max);
             cuda_try_or_return(cudaDeviceSynchronize());
             cuda_try_or_return(cudaGetLastError());
 

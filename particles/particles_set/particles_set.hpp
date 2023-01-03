@@ -15,6 +15,7 @@ namespace particles
         float *velocity_x;
         float *velocity_y;
         float *charge;
+        float *charge_abs;
         float *mass;
 
     public:
@@ -25,7 +26,7 @@ namespace particles
             for (int i = 0; i < SET_SIZE; i++)
             {
                 result->position_x[i] = random_float(-1.5f, 1.5f);
-                result->position_y[i] = random_float(-1.5f, 1.5f);
+                result->position_y[i] = random_float(-0.9f, 0.9f);
                 result->velocity_x[i] = random_float(-0.001f, 0.001f);
                 result->velocity_y[i] = random_float(-0.001f, 0.001f);
 
@@ -33,11 +34,13 @@ namespace particles
                 {
                     result->charge[i] = 1.0f;
                     result->mass[i] = 1.00727647f;
+                    result->charge_abs[i] = 1.0f;
                 }
                 else
                 {
                     result->charge[i] = -1.0f;
                     result->mass[i] = 0.0005485f;
+                    result->charge_abs[i] = 1.0f;
                 }
             }
 
@@ -60,6 +63,7 @@ namespace particles
             delete[] this->velocity_x;
             delete[] this->velocity_y;
             delete[] this->charge;
+            delete[] this->charge_abs;
             delete[] this->mass;
         }
 
@@ -82,6 +86,7 @@ namespace particles
             this->velocity_x = new float[SET_SIZE];
             this->velocity_y = new float[SET_SIZE];
             this->charge = new float[SET_SIZE];
+            this->charge_abs = new float[SET_SIZE];
             this->mass = new float[SET_SIZE];
         }
     };
