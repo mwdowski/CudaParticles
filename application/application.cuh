@@ -1,5 +1,6 @@
 #pragma once
 
+//#define GLFW_DLL
 #include <GLFW/glfw3.h>
 
 #include "../particles/particles_set/particles_set.hpp"

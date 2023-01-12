@@ -23,6 +23,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
+    <None Include="glfw_local\lib-vc2022\glfw3.dll">
+      <DeploymentContent>false</DeploymentContent>
+    </None>
     <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
@@ -61,12 +64,12 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <SourcePath>C:\Users\01142150\Desktop\glfw-3.3.8.bin.WIN64\glfw-3.3.8.bin.WIN64\include;$(SourcePath)</SourcePath>
-    <LibraryPath>C:\Users\01142150\Desktop\glfw-3.3.8.bin.WIN64\glfw-3.3.8.bin.WIN64\lib-vc2022;$(LibraryPath)</LibraryPath>
+    <SourcePath>$(SourcePath)</SourcePath>
+    <LibraryPath>$(ProjectDir)glfw_local\lib-vc2022;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <SourcePath>C:\Users\01142150\Desktop\glfw-3.3.8.bin.WIN64\glfw-3.3.8.bin.WIN64\include;$(SourcePath)</SourcePath>
-    <LibraryPath>C:\Users\01142150\Desktop\glfw-3.3.8.bin.WIN64\glfw-3.3.8.bin.WIN64\lib-vc2022;$(LibraryPath)</LibraryPath>
+    <SourcePath>$(SourcePath)</SourcePath>
+    <LibraryPath>$(ProjectDir)glfw_local\lib-vc2022;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -80,7 +83,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;opengl32.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreAllDefaultLibraries>
       </IgnoreAllDefaultLibraries>
       <IgnoreSpecificDefaultLibraries>libcmt.lib</IgnoreSpecificDefaultLibraries>
@@ -88,9 +91,12 @@
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <CodeGeneration>compute_72,sm_72</CodeGeneration>
+      <AdditionalDeps>%(AdditionalDeps)</AdditionalDeps>
+      <Include>$(ProjectDir)glfw_local\include</Include>
     </CudaCompile>
     <CudaLink>
-      <AdditionalDependencies>opengl32.lib;glu.lib;glew32.lib</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glu.lib;glew32.lib;glfw3dll.lib;glfw3.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)glfw_local\lib-vs2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </CudaLink>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -109,16 +115,19 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;opengl32.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreAllDefaultLibraries>
       </IgnoreAllDefaultLibraries>
       <IgnoreSpecificDefaultLibraries>libcmt.lib</IgnoreSpecificDefaultLibraries>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
+      <AdditionalDeps>%(AdditionalDeps)</AdditionalDeps>
+      <Include>$(ProjectDir)glfw_local\include</Include>
     </CudaCompile>
     <CudaLink>
-      <AdditionalDependencies>opengl32.lib;glu.lib;glew32.lib</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glu.lib;glew32.lib;glfw3dll.lib;glfw3.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)glfw_local\lib-vs2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </CudaLink>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
